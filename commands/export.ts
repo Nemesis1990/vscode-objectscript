@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import fs = require('fs');
 import path = require('path');
 import { AtelierAPI } from '../api';
-import { outputChannel, mkdirSyncRecursive, currentWorkspaceFolder, notNull } from '../utils';
+import { outputChannel, mkdirSyncRecursive, notNull } from '../utils';
 import { PackageNode } from '../explorer/models/packageNode';
 import { ClassNode } from '../explorer/models/classesNode';
 import { RoutineNode } from '../explorer/models/routineNode';

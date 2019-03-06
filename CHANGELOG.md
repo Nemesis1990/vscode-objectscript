@@ -1,5 +1,10 @@
 # Change Log
 
+## [0.7.12]
+
+- added connection setting "objectscript.conn.ignoreConflicts" if disabled the timestamps of the server and local version of a file get's checked. On conflict you will get 3 options to resolve a conflict: "Save local copy", "Save server copy" and "cancel". Default is true
+- using "export" now works correctly when using multi-root-workspaces
+
 ## [0.7.11]
 
 - added export setting "objectscript.export.addCategory" if enabled uses previous behavior, adds category folder to export folder, disabled by default

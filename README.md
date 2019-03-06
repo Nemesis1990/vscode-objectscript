@@ -42,7 +42,8 @@ To be able to use many plugin features, you need to configure the connection to 
     "username": "user",
     "password": "password",
     "ns": "USER",
-    "https": false
+    "https": false,
+    "ignoreConflicts": true
   }
   ```
 - Change settings according to your Caché/IRIS instance

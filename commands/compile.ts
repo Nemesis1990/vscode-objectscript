@@ -26,7 +26,7 @@ async function importFile(file: CurrentFile, flags: string, ignoreConflicts: boo
         file.name,
         {
           enc: false,
-          content: file.content.split(/\r`\n/)
+          content: file.content.split(/\r?\n/)
         },
         true
       )

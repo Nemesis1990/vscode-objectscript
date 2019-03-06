@@ -13,23 +13,46 @@ async function compileFlags(): Promise<string> {
   });
 }
 
-async function importFile(file: CurrentFile, flags: string): Promise<any> {
+async function importFile(file: CurrentFile, flags: string, ignoreConflicts: boolean): Promise<any> {
   const api = new AtelierAPI();
-  return api
-    .putDoc(
-      file.name,
-      {
-        enc: false,
-        content: file.content.split(/\r?\n/)
-      },
-      true
-    )
-    .then(data => compile(file, flags))
-    .catch((error: Error) => {
-      outputChannel.appendLine(error.message);
-      outputChannel.show(true);
-      vscode.window.showErrorMessage(error.message);
-    });
+  return api.getDoc(file.name).then(data => {
+    let hasConflict = false;
+    let serverDate: Date = new Date(data.result.ts);
+    if (serverDate>file.timestamp) {
+      hasConflict = !ignoreConflicts;
+    }
+    if (!hasConflict) {
+      api.putDoc(
+        file.name,
+        {
+          enc: false,
+          content: file.content.split(/\r`\n/)
+        },
+        true
+      )
+      .then(data => compile(file, flags))
+      .catch((error: Error) => {
+        outputChannel.appendLine(error.message);
+        outputChannel.show(true);
+        vscode.window.showErrorMessage(error.message);
+      });
+    } else {
+      vscode.window.showErrorMessage('Server has a newer version of this document.',
+      ...['Save local copy', 'Save server copy', 'cancel']).then(choice => {
+        if (choice==='Save local copy') {
+          importFile(file, flags, true);
+        } else if (choice === 'Save server copy') {
+          outputChannel.appendLine('Loading changes from server');
+          outputChannel.show(true);
+          loadChanges(file);
+        } else {
+          outputChannel.appendLine('Compile canceled by user');
+          outputChannel.show(true);
+          vscode.window.showErrorMessage('Compile canceled by user');
+        }
+      })
+    }
+  })
 }
 
 function updateOthers(others: string[]) {
@@ -74,8 +97,9 @@ export async function importAndCompile(askFLags = false): Promise<any> {
     return;
   }
   const defaultFlags = config().compileFlags;
+  const ignoreConflicts = config('conn').ignoreConflicts;
   const flags = askFLags ? await compileFlags() : defaultFlags;
-  return importFile(file, flags).catch(error => {
+  return importFile(file, flags, ignoreConflicts).catch(error => {
     console.error(error);
   });
 }

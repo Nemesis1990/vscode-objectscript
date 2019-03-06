@@ -371,6 +371,11 @@
           "readOnly": true,
           "deprecationMessage": "This value loads from server"
         },
+        "objectscript.conn.ignoreConflicts": {
+          "description": "Ignore timestamp conflicts",
+          "type": "boolean",
+          "default": true
+        },
         "objectscript.conn.https": {
           "description": "Use SSL to access to API",
           "type": "boolean",

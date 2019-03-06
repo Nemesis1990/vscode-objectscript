@@ -16,6 +16,7 @@ export interface CurrentFile {
   fileName: string;
   content: string;
   uri: vscode.Uri;
+  timestamp: Date;
 }
 
 export function currentFile(): CurrentFile {
@@ -43,11 +44,15 @@ export function currentFile(): CurrentFile {
   }
   name += '.' + ext;
 
+  let stats = fs.statSync(fileName);
+  let timestamp = stats.mtime;
+
   return {
     name,
     fileName,
     content,
-    uri
+    uri,
+    timestamp
   };
 }
 

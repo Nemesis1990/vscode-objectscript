@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import fs = require('fs');
 import path = require('path');
 import { AtelierAPI } from '../api';
-import { outputChannel, mkdirSyncRecursive, notNull } from '../utils';
+import { outputChannel, mkdirSyncRecursive, notNull, workspaceFolderUri } from '../utils';
 import { PackageNode } from '../explorer/models/packageNode';
 import { ClassNode } from '../explorer/models/classesNode';
 import { RoutineNode } from '../explorer/models/routineNode';
@@ -19,13 +19,6 @@ const filesFilter = (file: any) => {
 const getFileName = (folder: string, name: string, split: boolean, addCategory: boolean, workspaceFolder: string = ''): string => {
   let fileNameArray: string[] = name.split('.');
   let fileExt = fileNameArray.pop().toLowerCase();
-  let workspaceFolders: vscode.WorkspaceFolder[] = vscode.workspace.workspaceFolders;
-  let root = vscode.workspace.rootPath;
-  workspaceFolders.forEach(el => {
-    if (el.name.toLowerCase() === workspaceFolder.toLowerCase()) {
-      root = el.uri.fsPath;
-    }
-  })
   const cat = addCategory
     ? fileExt === 'cls'
       ? 'CLS'
@@ -34,17 +27,18 @@ const getFileName = (folder: string, name: string, split: boolean, addCategory: 
       : 'OTH'
     : null;
   if (split) {
-    let fileName = [root, folder, cat, ...fileNameArray].filter(notNull).join(path.sep);
+    let fileName = [folder, cat, ...fileNameArray].filter(notNull).join(path.sep);
     return [fileName, fileExt].join('.');
   }
-  return [root, folder, cat, name].filter(notNull).join(path.sep);
+  return [folder, cat, name].filter(notNull).join(path.sep);
 };
 
-export async function exportFile(name: string, fileName: string): Promise<any> {
-  if (!config('conn').active) {
+export async function exportFile(workspaceFolder: string, name: string, fileName: string): Promise<any> {
+  if (!config('conn', workspaceFolder).active) {
     return;
   }
   const api = new AtelierAPI();
+  api.setConnection(workspaceFolder);
   const log = status => outputChannel.appendLine(`export "${name}" as "${fileName}" - ${status}`);
   const folders = path.dirname(fileName);
   return mkdirSyncRecursive(folders)
@@ -120,8 +114,9 @@ export async function exportList(files: string[], workspaceFolder: string): Prom
   if (!files || !files.length) {
     vscode.window.showWarningMessage('Nothing to export');
   }
-  const { atelier, folder, maxConcurrentConnections, addCategory } = config('export');
+  const { atelier, folder, maxConcurrentConnections, addCategory } = config('export', workspaceFolder);
 
+  const root = [workspaceFolderUri(workspaceFolder).fsPath, folder].join(path.sep);
   if (maxConcurrentConnections > 0) {
     const limiter = new Bottleneck({
       maxConcurrent: maxConcurrentConnections
@@ -129,7 +124,7 @@ export async function exportList(files: string[], workspaceFolder: string): Prom
     const results = [];
     for (let i = 0; i < files.length; i++) {
       const result = await limiter.schedule(() =>
-        exportFile(files[i], getFileName(folder, files[i], atelier, addCategory, workspaceFolder))
+        exportFile(workspaceFolder, files[i], getFileName(root, files[i], atelier, addCategory))
       );
       results.push(result);
     }
@@ -137,28 +132,39 @@ export async function exportList(files: string[], workspaceFolder: string): Prom
   }
   return Promise.all(
     files.map(file => {
-      exportFile(file, getFileName(folder, file, atelier, addCategory, workspaceFolder));
+      exportFile(workspaceFolder, file, getFileName(root, file, atelier, addCategory));
     })
   );
 }
 
-export async function exportAll(): Promise<any> {
-  if (!config('conn').active) {
+export async function exportAll(workspaceFolder?: string): Promise<any> {
+  if (!workspaceFolder) {
+    let list = vscode.workspace.workspaceFolders
+      .filter(folder => config('conn', folder.name).active)
+      .map(el => el.name);
+    if (list.length > 1) {
+      return vscode.window.showQuickPick(list).then(exportAll);
+    } else {
+      workspaceFolder = list.pop();
+    }
+  }
+  if (!config('conn', workspaceFolder).active) {
     return;
   }
   const api = new AtelierAPI();
+  api.setConnection(workspaceFolder);
   outputChannel.show(true);
-  const { category, generated, filter } = config('export');
+  const { category, generated, filter } = config('export', workspaceFolder);
   const files = data => data.result.content.filter(filesFilter).map(file => file.name);
   return api.getDocNames({ category, generated, filter }).then(data => {
-    return exportList(files(data), null);
+    return exportList(files(data), workspaceFolder);
   });
 }
 
 export async function exportExplorerItem(node: PackageNode | ClassNode | RoutineNode): Promise<any> {
-  if (!config('conn').active) {
+  if (!config('conn', node.workspaceFolder).active) {
     return;
   }
   const items = node instanceof PackageNode ? node.getClasses() : [node.fullName];
-  return exportList(items, node.getWorkspacefolder());
+  return exportList(items, node.workspaceFolder);
 }

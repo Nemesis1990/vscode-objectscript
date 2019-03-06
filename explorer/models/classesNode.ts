@@ -13,7 +13,11 @@ export class ClassNode extends NodeBase {
     super(label);
   }
 
+<<<<<<< HEAD
   getWorkspacefolder(): string {
+=======
+  get workspaceFolder(): string {
+>>>>>>> d77e7428a0a674e6f4191696875070e7e86f997f
     return this._workspaceFolder;
   }
 

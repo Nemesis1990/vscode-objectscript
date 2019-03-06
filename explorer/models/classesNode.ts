@@ -13,6 +13,10 @@ export class ClassNode extends NodeBase {
     super(label);
   }
 
+  getWorkspacefolder(): string {
+    return this._workspaceFolder;
+  }
+
   getTreeItem(): vscode.TreeItem {
     let displayName: string = this.label;
 

@@ -16,10 +16,16 @@ const filesFilter = (file: any) => {
   return true;
 };
 
-const getFileName = (folder: string, name: string, split: boolean, addCategory: boolean): string => {
+const getFileName = (folder: string, name: string, split: boolean, addCategory: boolean, workspaceFolder: string = ''): string => {
   let fileNameArray: string[] = name.split('.');
   let fileExt = fileNameArray.pop().toLowerCase();
-  const root = [vscode.workspace.rootPath, currentWorkspaceFolder()].join(path.sep);
+  let workspaceFolders: vscode.WorkspaceFolder[] = vscode.workspace.workspaceFolders;
+  let root = vscode.workspace.rootPath;
+  workspaceFolders.forEach(el => {
+    if (el.name.toLowerCase() === workspaceFolder.toLowerCase()) {
+      root = el.uri.fsPath;
+    }
+  })
   const cat = addCategory
     ? fileExt === 'cls'
       ? 'CLS'
@@ -110,7 +116,7 @@ export async function exportFile(name: string, fileName: string): Promise<any> {
     });
 }
 
-export async function exportList(files: string[]): Promise<any> {
+export async function exportList(files: string[], workspaceFolder: string): Promise<any> {
   if (!files || !files.length) {
     vscode.window.showWarningMessage('Nothing to export');
   }
@@ -123,7 +129,7 @@ export async function exportList(files: string[]): Promise<any> {
     const results = [];
     for (let i = 0; i < files.length; i++) {
       const result = await limiter.schedule(() =>
-        exportFile(files[i], getFileName(folder, files[i], atelier, addCategory))
+        exportFile(files[i], getFileName(folder, files[i], atelier, addCategory, workspaceFolder))
       );
       results.push(result);
     }
@@ -131,7 +137,7 @@ export async function exportList(files: string[]): Promise<any> {
   }
   return Promise.all(
     files.map(file => {
-      exportFile(file, getFileName(folder, file, atelier, addCategory));
+      exportFile(file, getFileName(folder, file, atelier, addCategory, workspaceFolder));
     })
   );
 }
@@ -145,7 +151,7 @@ export async function exportAll(): Promise<any> {
   const { category, generated, filter } = config('export');
   const files = data => data.result.content.filter(filesFilter).map(file => file.name);
   return api.getDocNames({ category, generated, filter }).then(data => {
-    return exportList(files(data));
+    return exportList(files(data), null);
   });
 }
 
@@ -154,5 +160,5 @@ export async function exportExplorerItem(node: PackageNode | ClassNode | Routine
     return;
   }
   const items = node instanceof PackageNode ? node.getClasses() : [node.fullName];
-  return exportList(items);
+  return exportList(items, node.getWorkspacefolder());
 }

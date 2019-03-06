@@ -232,4 +232,8 @@ export class AtelierAPI {
       includes
     });
   }
+  // v1+
+  deleteDoc(docname: string): Promise<any> {
+    return this.request(1, 'DELETE', `${this.ns}/doc/${docname}`)
+  }
 }

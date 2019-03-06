@@ -5,7 +5,7 @@ export const OBJECTSCRIPTXML_FILE_SCHEMA = 'objectscriptxml';
 
 import { viewOthers } from './commands/viewOthers';
 import { importAndCompile } from './commands/compile';
-import { exportAll, exportExplorerItem } from './commands/export';
+import { exportAll, exportExplorerItem, deleteExplorerItem } from './commands/export';
 import { xml2doc } from './commands/xml2doc';
 import { subclass } from './commands/subclass';
 import { superclass } from './commands/superclass';
@@ -147,6 +147,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.commands.registerCommand('vscode-objectscript.explorer.openClass', vscode.window.showTextDocument),
     vscode.commands.registerCommand('vscode-objectscript.explorer.openRoutine', vscode.window.showTextDocument),
     vscode.commands.registerCommand('vscode-objectscript.explorer.export', exportExplorerItem),
+    vscode.commands.registerCommand('vscode-objectscript.explorer.delete', deleteExplorerItem),
     vscode.commands.registerCommand('vscode-objectscript.explorer.showSystem', (workspaceNode?: WorkspaceNode) => {
       if (workspaceNode) {
         explorerProvider.showSystem4Workspace(workspaceNode.label, true);

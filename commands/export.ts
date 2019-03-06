@@ -33,6 +33,25 @@ const getFileName = (folder: string, name: string, split: boolean, addCategory: 
   return [folder, cat, name].filter(notNull).join(path.sep);
 };
 
+export async function deleteFile(name: string): Promise<any> {
+  const api = new AtelierAPI();
+  const log = status => outputChannel.appendLine(`deleting "${name}" from server - ${status}`);
+  return vscode.window.showWarningMessage(`Do you really want to delete ${name} from the server?`, ...['Yes', 'No'])
+  .then(choice => {
+    if (choice==='Yes') {
+      api.deleteDoc(name).then((success) => {
+        log('success');
+        // TODO: reload explorer-provider
+        vscode.commands.executeCommand('vscode-objectscript.explorer.refresh');
+      }).catch((error: Error) => {
+        log(error.message)
+      })
+    } else {
+      log('canceled by user');
+    }
+  })
+}
+
 export async function exportFile(workspaceFolder: string, name: string, fileName: string): Promise<any> {
   if (!config('conn', workspaceFolder).active) {
     return;
@@ -167,4 +186,11 @@ export async function exportExplorerItem(node: PackageNode | ClassNode | Routine
   }
   const items = node instanceof PackageNode ? node.getClasses() : [node.fullName];
   return exportList(items, node.workspaceFolder);
+}
+
+export async function deleteExplorerItem(node: ClassNode): Promise<any> {
+  if (!config('conn', node.workspaceFolder).active) {
+    return;
+  }
+  return deleteFile(node.fullName);
 }

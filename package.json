@@ -43,6 +43,7 @@
     "onCommand:vscode-objectscript.viewOthers",
     "onCommand:vscode-objectscript.previewXml",
     "onCommand:vscode-objectscript.explorer.refresh",
+    "onCommand:vscode-objectscript.explorer.delete",
     "onCommand:vscode-objectscript.explorer.openClass",
     "onCommand:vscode-objectscript.explorer.openRoutine",
     "onCommand:vscode-objectscript.explorer.hideSystem",
@@ -95,6 +96,10 @@
           "when": "true"
         },
         {
+          "command": "vscode-objectscript.explorer.delete",
+          "when": "true"
+        },
+        {
           "command": "vscode-objectscript.explorer.refresh",
           "when": "true"
         },
@@ -126,6 +131,10 @@
         {
           "command": "vscode-objectscript.explorer.export",
           "when": "view == ObjectScriptExplorer && viewItem == routineNode"
+        },
+        {
+          "command": "vscode-objectscript.explorer.delete",
+          "when": "view == ObjectScriptExplorer && viewItem == classNode"
         },
         {
           "command": "vscode-objectscript.explorer.showSystem",
@@ -283,6 +292,11 @@
         "command": "vscode-objectscript.explorer.export",
         "title": "Export",
         "category": "ObjecScript"
+      },
+      {
+        "command": "vscode-objectscript.explorer.delete",
+        "title": "Delete class on server",
+        "category": "ObjectScript"
       },
       {
         "command": "vscode-objectscript.explorer.refresh",

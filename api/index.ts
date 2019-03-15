@@ -236,4 +236,10 @@ export class AtelierAPI {
   deleteDoc(docname: string): Promise<any> {
     return this.request(1, 'DELETE', `${this.ns}/doc/${docname}`)
   }
+
+  getMacroList(docname:string, macroName: string): Promise<any> {
+    return this.request(2, 'POST', `${this.ns}/action/getmacrolist`, {
+      docname: docname
+    });
+  }
 }

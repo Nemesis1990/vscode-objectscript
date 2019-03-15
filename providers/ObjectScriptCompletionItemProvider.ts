@@ -5,7 +5,7 @@ import systemFunctions = require('./completion/systemFunctions.json');
 import systemVariables = require('./completion/systemVariables.json');
 import structuredSystemVariables = require('./completion/structuredSystemVariables.json');
 import { ClassDefinition } from '../utils/classDefinition.js';
-import { currentFile, CurrentFile, outputChannel } from '../utils/index.js';
+import { currentFile, CurrentFile } from '../utils/index.js';
 import { AtelierAPI } from '../api/index.js';
 import { ObjectScriptParser, COSClassDefinition, COSClassMethodDefinition, COSMethodDefinition } from './parser/cosParser.js';
 
@@ -17,8 +17,6 @@ export class ObjectScriptCompletionItemProvider implements vscode.CompletionItem
     context: vscode.CompletionContext
   ): vscode.ProviderResult<vscode.CompletionItem[] | vscode.CompletionList> {
     let ob = new ObjectScriptParser(document);
-    outputChannel.appendLine("Trigger: " + context.triggerCharacter);
-    outputChannel.show(true);
     if (context.triggerKind === vscode.CompletionTriggerKind.TriggerCharacter) {
       if (context.triggerCharacter === '#')
         return this.macro(document, position, token, context) || this.entities(document, position, token, context, ob.ClassDefinition);
@@ -28,7 +26,7 @@ export class ObjectScriptCompletionItemProvider implements vscode.CompletionItem
       this.locals(document, position, ob.ClassDefinition) ||
       this.dollarsComplete(document, position) ||
       this.commands(document, position) ||
-      this.entities(document, position, token, context) ||
+      this.entities(document, position, token, context, ob.ClassDefinition) ||
       this.macro(document, position, token, context) ||
       this.constants(document, position, token, context)
     );
@@ -272,7 +270,7 @@ export class ObjectScriptCompletionItemProvider implements vscode.CompletionItem
       label: el.name,
       documentation: el.desc.length ? new vscode.MarkdownString(el.desc.join('')) : null,
       kind: vscode.CompletionItemKind.Property,
-      insertText: new vscode.SnippetString(`${el.name}`)
+      insertText: new vscode.SnippetString(`${el.name}`),
     });
 
     const search = el => el.name.startsWith(originalSearchText);
@@ -316,19 +314,15 @@ export class ObjectScriptCompletionItemProvider implements vscode.CompletionItem
           if (struct.length>1) {
             struct.shift();
             return Promise.all([classDef.methods(), classDef.properties()]).then(data => {
-              let [methods, properties] = data;
-              outputChannel.appendLine(JSON.stringify(methods));
-              let type = properties.filter(el => el.name === struct[0])[0].type;
-              let tempClass: ClassDefinition = new ClassDefinition(type);
-              struct.forEach((el, ind, arr) => {
-                if (ind+1 === arr.length) {
-                  return tempClass.properties();
-                } else {
-                  type = properties.filter(ele => ele.name == el)[0].type;
-                }
+              data[0] = data[0].filter(el => el.name === struct[0]);
+              data[1] = data[1].filter(el => el.name === struct[0]);
+              let type = data[1][0].type;
+              let cls: ClassDefinition = new ClassDefinition(type);
+              return Promise.all([cls.methods(), cls.properties()]).then(data => {
+                let [methods, properties] = data;
+                return [  ...methods.filter(search).map(method),
+                          ...properties.filter(search).map(property)]
               });
-            }).then((data: any) => {
-              return data.map(property);
             });
           } else {
             return Promise.all([classDef.methods(), classDef.properties()]).then(data => {

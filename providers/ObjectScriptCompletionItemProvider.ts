@@ -64,7 +64,7 @@ export class ObjectScriptCompletionItemProvider implements vscode.CompletionItem
         }));
         arr.push({
           label: '##class()',
-          insertText: new vscode.SnippetString('##class($0)'),
+          insertText: new vscode.SnippetString('##class($1).$0'),
           range
         });
         arr.push({
@@ -74,7 +74,7 @@ export class ObjectScriptCompletionItemProvider implements vscode.CompletionItem
         });
         arr.push({
           label: '#dim',
-          insertText: new vscode.SnippetString('#dim $0 As $1 = $3'),
+          insertText: new vscode.SnippetString('#dim $0 As $1 = $0'),
           range
         });
         return arr;
@@ -260,7 +260,6 @@ export class ObjectScriptCompletionItemProvider implements vscode.CompletionItem
     let curFile = currentFile();
     let searchText = document.getText(range);
     let originalSearchText = searchText;
-
     let parseArgs = el => {
       let markdown: string = el.name+"(";
       el.args.forEach((arg, ind, arr) => {
@@ -353,12 +352,12 @@ export class ObjectScriptCompletionItemProvider implements vscode.CompletionItem
       } else {
         let context: COSClassMethodDefinition | COSMethodDefinition
         let struct: string[] = [searchText];
-        context = cosClass.getContext(document, position);
         if (!searchText) {
-          searchText = textBefore.split(' ')[1].split('.')[0];
-          struct = textBefore.split(' ')[1].split('.');
+          searchText = textBefore.replace('(', '').split(' ')[1].split('.')[0];
+          struct = textBefore.replace('(', '').split(' ')[1].split('.');
           struct.pop();
         }
+        context = cosClass.getContext(document, position);
         let classDef = null;
         context.locals.forEach((el) => {
           if (el.name === searchText) {
@@ -367,18 +366,25 @@ export class ObjectScriptCompletionItemProvider implements vscode.CompletionItem
         });
         if (classDef) {
           if (struct.length>1) {
-            struct.shift();
-            return Promise.all([classDef.methods(), classDef.properties()]).then(data => {
-              data[0] = data[0].filter(el => el.name === struct[0]);
-              data[1] = data[1].filter(el => el.name === struct[0]);
-              let type = data[1][0].type;
-              let cls: ClassDefinition = new ClassDefinition(type);
-              return Promise.all([cls.methods(), cls.properties()]).then(data => {
-                let [methods, properties] = data;
-                return [  ...methods.filter(search).map(method),
-                          ...properties.filter(search).map(property)]
+            let getInfo = (classDef, struct) => {
+              struct.shift();
+              return Promise.all([classDef.methods(), classDef.properties()]).then(data => {
+                data[0] = data[0].filter(el => el.name === struct[0]);
+                data[1] = data[1].filter(el => el.name === struct[0]);
+                let type = data[1][0].type;
+                let cls: ClassDefinition = new ClassDefinition(type);
+                if (struct.length>1) {
+                  return getInfo(cls, struct);
+                } else {
+                  return Promise.all([cls.methods(), cls.properties()]).then(data => {
+                    let [methods, properties] = data;
+                    return [  ...methods.filter(search).map(method),
+                              ...properties.filter(search).map(property)]
+                  });
+                }
               });
-            });
+            }
+            return getInfo(classDef, struct);
           } else {
             return Promise.all([classDef.methods(), classDef.properties()]).then(data => {
               let [methods, properties] = data;

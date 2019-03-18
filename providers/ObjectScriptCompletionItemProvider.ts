@@ -16,26 +16,30 @@ export class ObjectScriptCompletionItemProvider implements vscode.CompletionItem
     token: vscode.CancellationToken,
     context: vscode.CompletionContext
   ): vscode.ProviderResult<vscode.CompletionItem[] | vscode.CompletionList> {
-    let ob = new ObjectScriptParser(document);
-    if (context.triggerKind === vscode.CompletionTriggerKind.TriggerCharacter) {
-      if (context.triggerCharacter === '#')
-        return this.entities(document, position, token, context, ob.ClassDefinition) || this.macro(document, position, token, context);
-      if (context.triggerCharacter === '.') return this.entities(document, position, token, context, ob.ClassDefinition);
+    try {
+      let ob = new ObjectScriptParser(document);
+      if (context.triggerKind === vscode.CompletionTriggerKind.TriggerCharacter) {
+        if (context.triggerCharacter === '#')
+          return this.entities(document, position, token, context, ob.ClassDefinition) || this.macro(document, position, token, context);
+        if (context.triggerCharacter === '.') return this.entities(document, position, token, context, ob.ClassDefinition);
+      }
+      let list = [];
+      let dollars: any = this.dollarsComplete(document, position);
+      let commands: any = this.commands(document, position);
+      let entities = this.entities(document, position, token, context, ob.ClassDefinition);
+      let macro = this.macro(document, position, token, context);
+      let constants = this.constants(document, position, token, context);
+      let locals = this.locals(document, position, ob.ClassDefinition);
+      list = commands ? list.concat(commands.items || commands) : list;
+      list = dollars ? list.concat(dollars.items || dollars) : list;
+      list = entities ? list.concat(entities) : list;
+      list = macro ? list.concat(macro) : list;
+      list = constants ? list.concat(constants) : list;
+      list = locals ? list.concat(locals) : list;
+      return list;
+    } catch (err) {
+      outputChannel.appendLine(err.message || err);
     }
-    let list = [];
-    let dollars: any = this.dollarsComplete(document, position);
-    let commands: any = this.commands(document, position);
-    let entities = this.entities(document, position, token, context, ob.ClassDefinition);
-    let macro = this.macro(document, position, token, context);
-    let constants = this.constants(document, position, token, context);
-    let locals = this.locals(document, position, ob.ClassDefinition);
-    list = commands ? list.concat(commands.items || commands) : list;
-    list = dollars ? list.concat(dollars.items || dollars) : list;
-    list = entities ? list.concat(entities) : list;
-    list = macro ? list.concat(macro) : list;
-    list = constants ? list.concat(constants) : list;
-    list = locals ? list.concat(locals) : list;
-    return list;
   }
 
   macro(
@@ -256,11 +260,21 @@ export class ObjectScriptCompletionItemProvider implements vscode.CompletionItem
     let curFile = currentFile();
     let searchText = document.getText(range);
     let originalSearchText = searchText;
+
+    let parseArgs = el => {
+      let markdown: string = el.name+"(";
+      el.args.forEach((arg, ind, arr) => {
+        markdown += '${'+(ind+1)+':'+arg.name+'}' + ((arr.length-1!==ind) ? ',' : '');
+      });
+      markdown += ')$0';
+      return markdown;
+    }
     const method = el => ({
       label: el.name,
       documentation: el.desc.length ? new vscode.MarkdownString(el.desc.join('')) : null,
       kind: vscode.CompletionItemKind.Method,
-      insertText: new vscode.SnippetString(`${el.name}($0)`)
+      //insertText: new vscode.SnippetString(`${el.name}($0)`)
+      insertText: new vscode.SnippetString(parseArgs(el))
     });
 
     const parameter = el => ({
@@ -278,16 +292,19 @@ export class ObjectScriptCompletionItemProvider implements vscode.CompletionItem
       insertText: new vscode.SnippetString(`${el.name}`),
     });
 
-    const module = el => {
+    const cls = el => {
       // @ts-ignore
       let searchText = line.replace('AS', '[AS]').split('[AS]')[1].trim();
+      if (isClassContainer) {
+        searchText = line.split('##class(').join('##CLASS(').split('##CLASS(')[1].replace(')','').trim();
+      }
       let regex: RegExp = new RegExp('^('+searchText+')', 'i');
-      let snipArr: any[] = el.name.replace('.cls','').replace(regex, '').split('.');
+      let snippet = el.name.replace('.cls','').replace(regex, '');
       return {
-        label: `${snipArr.join('.')}`,
-        documentation: null,
-        kind: vscode.CompletionItemKind.Module,
-        insertText: new vscode.SnippetString(snipArr.join('.'))
+        label: `${snippet}`,
+        documentation: el.name,
+        kind: vscode.CompletionItemKind.Class,
+        insertText: new vscode.SnippetString(`${snippet}$0`)
       }
     }
 
@@ -295,15 +312,21 @@ export class ObjectScriptCompletionItemProvider implements vscode.CompletionItem
 
     // are we trying to dim something?
     let isDim = false;
-    let line: string = document.lineAt(position.line).text.toUpperCase();
-    let packname = line.replace('AS', '[AS]').split('[AS]')[1].trim();
+    let isClassContainer = false;
+    let line = document.lineAt(position.line).text.toUpperCase();
+    let packname = line.replace('AS', '[AS]').split('[AS]')[1] || '';
+    packname = packname.trim();
     if ((line.indexOf('#DIM')>=0) && (line.indexOf('=')===-1)) {
       isDim = true;
     }
-    if (isDim) {
+    if (/(##class)/i.test(line) && textBefore.endsWith('.') && !textBefore.endsWith(').')) {
+      isClassContainer = true;
+      packname = line.split('##class(').join('##CLASS(').split('##CLASS(')[1].replace(')','').trim();
+    }
+    if (isDim || isClassContainer) {
       const api = new AtelierAPI();
       return api.getDocNames({category: 'cls', generated: false, filter: packname})
-        .then(data => data.result.content.map(module))
+        .then(data => data.result.content.map(cls))
         .catch(ex => outputChannel.appendLine(ex.error || ex));
     }
 

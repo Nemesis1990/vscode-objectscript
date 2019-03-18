@@ -24,6 +24,7 @@ export class ObjectScriptHoverProvider implements vscode.HoverProvider {
     );
     let file = currentFile();
 
+    
     let dollarsMatch = text.match(/(\^?\$+)(\b\w+\b)$/);
     if (dollarsMatch) {
       let range = document.getWordRangeAtPosition(position, /\^?\$+\b\w+\b$/);

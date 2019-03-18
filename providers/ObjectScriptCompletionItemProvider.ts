@@ -5,7 +5,7 @@ import systemFunctions = require('./completion/systemFunctions.json');
 import systemVariables = require('./completion/systemVariables.json');
 import structuredSystemVariables = require('./completion/structuredSystemVariables.json');
 import { ClassDefinition } from '../utils/classDefinition.js';
-import { currentFile, CurrentFile } from '../utils/index.js';
+import { currentFile, CurrentFile, outputChannel } from '../utils/index.js';
 import { AtelierAPI } from '../api/index.js';
 import { ObjectScriptParser, COSClassDefinition, COSClassMethodDefinition, COSMethodDefinition } from './parser/cosParser.js';
 
@@ -19,17 +19,23 @@ export class ObjectScriptCompletionItemProvider implements vscode.CompletionItem
     let ob = new ObjectScriptParser(document);
     if (context.triggerKind === vscode.CompletionTriggerKind.TriggerCharacter) {
       if (context.triggerCharacter === '#')
-        return this.macro(document, position, token, context) || this.entities(document, position, token, context, ob.ClassDefinition);
+        return this.entities(document, position, token, context, ob.ClassDefinition) || this.macro(document, position, token, context);
       if (context.triggerCharacter === '.') return this.entities(document, position, token, context, ob.ClassDefinition);
     }
-    return (
-      this.locals(document, position, ob.ClassDefinition) ||
-      this.dollarsComplete(document, position) ||
-      this.commands(document, position) ||
-      this.entities(document, position, token, context, ob.ClassDefinition) ||
-      this.macro(document, position, token, context) ||
-      this.constants(document, position, token, context)
-    );
+    let list = [];
+    let dollars: any = this.dollarsComplete(document, position);
+    let commands: any = this.commands(document, position);
+    let entities = this.entities(document, position, token, context, ob.ClassDefinition);
+    let macro = this.macro(document, position, token, context);
+    let constants = this.constants(document, position, token, context);
+    let locals = this.locals(document, position, ob.ClassDefinition);
+    list = commands ? list.concat(commands.items || commands) : list;
+    list = dollars ? list.concat(dollars.items || dollars) : list;
+    list = entities ? list.concat(entities) : list;
+    list = macro ? list.concat(macro) : list;
+    list = constants ? list.concat(constants) : list;
+    list = locals ? list.concat(locals) : list;
+    return list;
   }
 
   macro(
@@ -46,14 +52,12 @@ export class ObjectScriptCompletionItemProvider implements vscode.CompletionItem
     const api = new AtelierAPI();
     let curFile: CurrentFile = currentFile();
     if (range && line && line !== '') {
-      api.getMacroList(curFile.name, line).then(data => {
-        let arr = data.result.content.macros.map(el => {
-          return {
+      return api.getMacroList(curFile.name, line).then(data => {
+        let arr = data.result.content.macros.map(el => ({
             label: el,
             insertText: el,
             range
-          }
-        });
+        }));
         arr.push({
           label: '##class()',
           insertText: new vscode.SnippetString('##class($0)'),
@@ -69,6 +73,7 @@ export class ObjectScriptCompletionItemProvider implements vscode.CompletionItem
           insertText: new vscode.SnippetString('#dim $0 As $1 = $3'),
           range
         });
+        return arr;
       });
     }
     return null;
@@ -273,7 +278,34 @@ export class ObjectScriptCompletionItemProvider implements vscode.CompletionItem
       insertText: new vscode.SnippetString(`${el.name}`),
     });
 
+    const module = el => {
+      // @ts-ignore
+      let searchText = line.replace('AS', '[AS]').split('[AS]')[1].trim();
+      let regex: RegExp = new RegExp('^('+searchText+')', 'i');
+      let snipArr: any[] = el.name.replace('.cls','').replace(regex, '').split('.');
+      return {
+        label: `${snipArr.join('.')}`,
+        documentation: null,
+        kind: vscode.CompletionItemKind.Module,
+        insertText: new vscode.SnippetString(snipArr.join('.'))
+      }
+    }
+
     const search = el => el.name.startsWith(originalSearchText);
+
+    // are we trying to dim something?
+    let isDim = false;
+    let line: string = document.lineAt(position.line).text.toUpperCase();
+    let packname = line.replace('AS', '[AS]').split('[AS]')[1].trim();
+    if ((line.indexOf('#DIM')>=0) && (line.indexOf('=')===-1)) {
+      isDim = true;
+    }
+    if (isDim) {
+      const api = new AtelierAPI();
+      return api.getDocNames({category: 'cls', generated: false, filter: packname})
+        .then(data => data.result.content.map(module))
+        .catch(ex => outputChannel.appendLine(ex.error || ex));
+    }
 
     let classRef = textBefore.match(/##class\(([^)]+)\)\.#?$/i);
     if (classRef) {

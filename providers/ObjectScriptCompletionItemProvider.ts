@@ -21,19 +21,20 @@ export class ObjectScriptCompletionItemProvider implements vscode.CompletionItem
       if (context.triggerKind === vscode.CompletionTriggerKind.TriggerCharacter) {
         if (context.triggerCharacter === '#')
           return this.entities(document, position, token, context, ob.ClassDefinition) || this.macro(document, position, token, context);
-        if (context.triggerCharacter === '.') return this.entities(document, position, token, context, ob.ClassDefinition);
+        if (context.triggerCharacter === '.') 
+          return this.entities(document, position, token, context, ob.ClassDefinition);
       }
       let list = [];
       let dollars: any = this.dollarsComplete(document, position);
       let commands: any = this.commands(document, position);
       let entities = this.entities(document, position, token, context, ob.ClassDefinition);
-      let macro = this.macro(document, position, token, context);
+      let macros = this.macro(document, position, token, context);
       let constants = this.constants(document, position, token, context);
       let locals = this.locals(document, position, ob.ClassDefinition);
       list = commands ? list.concat(commands.items || commands) : list;
       list = dollars ? list.concat(dollars.items || dollars) : list;
       list = entities ? list.concat(entities) : list;
-      list = macro ? list.concat(macro) : list;
+      list = macros ? list.concat(macros) : list;
       list = constants ? list.concat(constants) : list;
       list = locals ? list.concat(locals) : list;
       return list;
@@ -42,7 +43,31 @@ export class ObjectScriptCompletionItemProvider implements vscode.CompletionItem
     }
   }
 
-  macro(
+  macro(document: vscode.TextDocument,
+    position: vscode.Position,
+    token: vscode.CancellationToken,
+    context: vscode.CompletionContext
+    ): vscode.ProviderResult<vscode.CompletionItem[] | vscode.CompletionList> {
+      let range = document.getWordRangeAtPosition(position);
+      let line = range ? document.getText(range) : '';
+      if (!line.startsWith('$$$')) return null;
+      const api = new AtelierAPI();
+      let curFile: CurrentFile = currentFile();
+      let searchtext = line.split('$$$')[1] || '';
+      let search = (el) => (searchtext !== '' ? el.indexOf(searchtext) : true);
+      let mac = el => ({
+        label: el,
+        insertText: new vscode.SnippetString(`${el}$0`)
+      });
+      if (line && line !== '') {
+        return api.getMacroList(curFile.name, line)
+        .then(data => data.result.content.macros.filter(search).map(mac))
+        .catch(err => outputChannel.appendLine(err.message || err));
+      }
+      return null;
+    }
+
+  macro_dep(
     document: vscode.TextDocument,
     position: vscode.Position,
     token: vscode.CancellationToken,
@@ -228,7 +253,8 @@ export class ObjectScriptCompletionItemProvider implements vscode.CompletionItem
         list.push({
           label: ele.name,
           detail: ele.type,
-          kind: vscode.CompletionItemKind.TypeParameter
+          kind: vscode.CompletionItemKind.TypeParameter,
+          sortText: (ele.name.startsWith('%') ? 'C': 'B')
         });
       })
       context.locals.forEach((ele) => {
@@ -241,7 +267,8 @@ export class ObjectScriptCompletionItemProvider implements vscode.CompletionItem
         list.push({
           label: ele.name,
           detail: ele.type,
-          kind: kind
+          kind: kind,
+          sortText: (ele.name.startsWith('%') ? 'C': 'B')
         });
       });
     }
@@ -273,7 +300,8 @@ export class ObjectScriptCompletionItemProvider implements vscode.CompletionItem
       documentation: el.desc.length ? new vscode.MarkdownString(el.desc.join('')) : null,
       kind: vscode.CompletionItemKind.Method,
       //insertText: new vscode.SnippetString(`${el.name}($0)`)
-      insertText: new vscode.SnippetString(parseArgs(el))
+      insertText: new vscode.SnippetString(parseArgs(el)),
+      sortText: (el.name.startsWith('%') ? 'C' : 'B')
     });
 
     const parameter = el => ({
@@ -281,7 +309,8 @@ export class ObjectScriptCompletionItemProvider implements vscode.CompletionItem
       documentation: el.desc.length ? new vscode.MarkdownString(el.desc.join('')) : null,
       kind: vscode.CompletionItemKind.Constant,
       range,
-      insertText: new vscode.SnippetString(`${el.name}`)
+      insertText: new vscode.SnippetString(`${el.name}`),
+      sortText: (el.name.startsWith('%') ? 'C' : 'B')
     });
 
     const property = el => ({
@@ -289,6 +318,7 @@ export class ObjectScriptCompletionItemProvider implements vscode.CompletionItem
       documentation: el.desc.length ? new vscode.MarkdownString(el.desc.join('')) : null,
       kind: vscode.CompletionItemKind.Property,
       insertText: new vscode.SnippetString(`${el.name}`),
+      sortText: (el.name.startsWith('%') ? 'C': 'B')
     });
 
     const cls = el => {
@@ -303,7 +333,8 @@ export class ObjectScriptCompletionItemProvider implements vscode.CompletionItem
         label: `${snippet}`,
         documentation: el.name,
         kind: vscode.CompletionItemKind.Class,
-        insertText: new vscode.SnippetString(`${snippet}$0`)
+        insertText: new vscode.SnippetString(`${snippet}$0`),
+        sortText: (el.name.startsWith('%') ? 'C': 'B')
       }
     }
 

@@ -1,5 +1,14 @@
 # Change Log
 
+## [0.8.0]
+### Added
+ - First IntelliSense implementation
+ - When "**ignoreConflicts=false**" you will get not an option for a merging-tool. You can Accept incoming/outgoing changes like in a normal Git-Merge-conflict (local git installation needed)
+ #### Known issues
+ - Macros not showing up ($$$)
+ - having a local file not compiled on server and not open in editor doesn't provide IntelliSense-features
+ 
+
 ## [0.7.12]
 
 - added connection setting "objectscript.conn.ignoreConflicts" if disabled the timestamps of the server and local version of a file get's checked. On conflict you will get 3 options to resolve a conflict: "Save local copy", "Save server copy" and "cancel". Default is true

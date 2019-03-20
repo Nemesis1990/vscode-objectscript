@@ -4,6 +4,7 @@ import { AtelierAPI } from '../api';
 import { currentFile, CurrentFile, outputChannel } from '../utils';
 import { documentContentProvider, config } from '../extension';
 import { DocumentContentProvider } from '../providers/DocumentContentProvider';
+import cp = require('child_process');
 
 async function compileFlags(): Promise<string> {
   const defaultFlags = config().compileFlags;
@@ -43,13 +44,35 @@ async function importFile(file: CurrentFile, flags: string, ignoreConflicts: boo
       put(file, flags);
     } else {
       vscode.window.showErrorMessage('Server has a newer version of this document.',
-      ...['Save local copy', 'Save server copy', 'cancel']).then(choice => {
+      ...['Save local copy', 'Save server copy','Merge Tool','cancel']).then(choice => {
         if (choice==='Save local copy') {
           importFile(file, flags, true);
         } else if (choice === 'Save server copy') {
           outputChannel.appendLine('Loading changes from server');
           outputChannel.show(true);
           loadChanges(file);
+        } else if (choice === 'Merge Tool') {
+          let incoming: string[] = data.result.content;
+          fs.writeFileSync(file.uri.fsPath+'.inc', incoming.join('\n'));
+          fs.writeFileSync(file.uri.fsPath+'.merge', '');
+          let child: cp.ChildProcess = 
+            cp.spawn(`git merge-file ${file.uri.fsPath} ${file.uri.fsPath+'.merge'} ${file.uri.fsPath+'.inc'} `,
+              { shell: true });
+          child.on('exit', (code, signal) => {
+            let edit: vscode.WorkspaceEdit = new vscode.WorkspaceEdit();
+            edit.deleteFile(vscode.Uri.file(file.uri.fsPath+'.inc'));
+            edit.deleteFile(vscode.Uri.file(file.uri.fsPath+'.merge'));
+            vscode.workspace.applyEdit(edit).then(() =>{}, (err) => outputChannel.appendLine(err.message || err));
+            if (code===1) {
+              vscode.workspace.openTextDocument(file.uri);
+            } else {
+              outputChannel.appendLine(`child process exited with code ${code} signal ${signal}`);
+            }
+          });
+          child.on('error', (err: any) => {
+            outputChannel.appendLine(`ERR: ${err.message}`);
+            outputChannel.appendLine('Merging failed. Canceling');
+          })
         } else {
           outputChannel.appendLine('Compile canceled by user');
           outputChannel.show(true);

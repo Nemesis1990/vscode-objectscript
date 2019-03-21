@@ -28,27 +28,31 @@ export class COSClassDefinition {
     parameters: COSParameterDefinition[] = [];
 
     static parse(textDocument: vscode.TextDocument): COSClassDefinition {
-        let classDef: COSClassDefinition = new COSClassDefinition();
-        let maxLines = textDocument.lineCount;
-        for (let i = 0; i<maxLines; i++) {
-            let line: vscode.TextLine = textDocument.lineAt(i);
-            let lineSplit = line.text.split(' ');
-            if (!line.isEmptyOrWhitespace) {
-                if (lineSplit[0].toUpperCase()==="CLASS") {
-                    classDef.name = lineSplit[1];
-                }
-                if (lineSplit[0].toUpperCase()=== "PROPERTY") {
-                    classDef.properties.push(COSPropertyDefinition.parse(line.text))
-                }
-                if (lineSplit[0].toUpperCase() === 'CLASSMETHOD') {
-                    classDef.classmethods.push(COSClassMethodDefinition.parse(line.text, i, textDocument));
-                }
-                if (lineSplit[0].toUpperCase() === 'METHOD') {
-                    classDef.methods.push(COSMethodDefinition.parse(line.text, i, textDocument));
+        try {
+            let classDef: COSClassDefinition = new COSClassDefinition();
+            let maxLines = textDocument.lineCount;
+            for (let i = 0; i<maxLines; i++) {
+                let line: vscode.TextLine = textDocument.lineAt(i);
+                let lineSplit = line.text.split('=').join(' = ').split(' ');
+                if (!line.isEmptyOrWhitespace) {
+                    if ((lineSplit[0] || '').toUpperCase()==="CLASS") {
+                        classDef.name = lineSplit[1];
+                    }
+                    if ((lineSplit[0] || '').toUpperCase()=== "PROPERTY") {
+                        classDef.properties.push(COSPropertyDefinition.parse(line.text))
+                    }
+                    if ((lineSplit[0] || '').toUpperCase() === 'CLASSMETHOD') {
+                        classDef.classmethods.push(COSClassMethodDefinition.parse(line.text, i, textDocument));
+                    }
+                    if ((lineSplit[0] || '').toUpperCase() === 'METHOD') {
+                        classDef.methods.push(COSMethodDefinition.parse(line.text, i, textDocument));
+                    }
                 }
             }
+            return classDef;
+        } catch (ex) {
+            throw ex
         }
-        return classDef;
     }
 
     getContext(textDocument: vscode.TextDocument, position: vscode.Position) {
@@ -57,8 +61,8 @@ export class COSClassDefinition {
         let context: COSClassMethodDefinition | COSMethodDefinition
         while ((!startFound) && (currPosition>=0)) {
             currPosition--;
-            let line = textDocument.lineAt(currPosition).text.toUpperCase();
-            let name: string = textDocument.lineAt(currPosition).text.replace('(',' ').split(' ')[1];
+            let line = (textDocument.lineAt(currPosition).text || '').toUpperCase();
+            let name: string = (textDocument.lineAt(currPosition).text || '').replace('(',' ').split(' ')[1];
             if (line.startsWith('CLASSMETHOD')) {
                 context = this.classmethods[this.classmethods.findIndex((val, ind, arr) => {
                     return (val.name===name);
@@ -91,11 +95,10 @@ export class COSClassMethodDefinition {
         let metDef: COSClassMethodDefinition = new COSClassMethodDefinition();
         let normalize = line => line.replace('(', ' (').split('(').join('').split(',').join('').split(')').join('').split("}").join("} ").split(' ');
         let linesplit = normalize(line);
-
-        if (linesplit[0].toUpperCase().startsWith("CLASSMETHOD")) {
+        if ((linesplit[0] || '').toUpperCase().startsWith("CLASSMETHOD")) {
             metDef.name = linesplit[1];
         }
-        linesplit.forEach((word, index, arr) => {
+        linesplit.forEach((word, index, arr: string[]) => {
             word = word.toUpperCase();
             if (word.startsWith("CLASSMETHOD")) {
                 metDef.name = arr[index+1];
@@ -103,16 +106,17 @@ export class COSClassMethodDefinition {
             } else {
                 if ((!word.startsWith("=")) && (!word.startsWith("AS"))) {
                     //Keyword
-                    if ((!arr[index-1].toUpperCase().startsWith("AS")) 
+                    if ((!(arr[index-1] || '').toUpperCase().startsWith("AS")) 
                     && (!word.startsWith("{"))
-                    && (word !== '')
+                    && (word !== '""')
                     && (word !== metDef.name.toUpperCase())) {
                         // parametername
-                        metDef.parameter.push({
-                            name: arr[index],
+                        let par = {
+                            name: (arr[index] || ''),
                             type: (arr[index+1] === "AS" ? arr[index+2]: '%String'),
-                            default: (arr[index+3] === "=" ? (arr[index+4].startsWith("{") ? '[COMPUTED]' : arr[index+4]) : '')
-                        });
+                            default: (arr[index+3] === "=" ? ((arr[index+4] || '').startsWith("{") ? '[COMPUTED]' : arr[index+4]) : '""')
+                        }
+                        metDef.parameter.push(par);
                     }
                 }
             }
@@ -153,11 +157,14 @@ export class COSClassMethodDefinition {
         }
         linesplit = methodBody.split(/\n/);
         linesplit.forEach((line, index, arr) => {
+            if (/^[a-z].*/i.test(line)) {
+                return;
+            }
             let lineUpper = line.toUpperCase().split(/\t/).join('').trim();
             let split = line.split(' ');
             if (lineUpper.startsWith("S") || lineUpper.startsWith("SET")) {
-                let varname: string = split[1];
-                if (varname.indexOf("(")>=0 || varname.indexOf(".")>=0) {
+                let varname: string = (split[1] || '').split('=')[0];
+                if (varname.indexOf("(")>=0 || varname.indexOf(".")>=0 || varname.startsWith('$')) {
                     return
                 }
                 if (!search("name", varname)) {
@@ -169,9 +176,12 @@ export class COSClassMethodDefinition {
                 }
             }
             if (lineUpper.startsWith("#DIM")) {
-                let varname: string = split[1];
+                let varname: string = (split[1] || '').split('=')[0];
+                if (varname.startsWith('$')) {
+                    return
+                }
                 let type: string = 'UNDEFINED';
-                if (split[2].toUpperCase() === "AS") {
+                if ((split[2] || '').toUpperCase() === "AS") {
                     type = split[3];
                 }
                 if (!search("name", varname)) {
@@ -201,7 +211,7 @@ export class COSMethodDefinition {
         let normalize = line => line.replace('(', ' (').split('(').join('').split(',').join('').split(')').join('').split("}").join("} ").split(' ');
         let linesplit = normalize(line);
 
-        if (linesplit[0].toUpperCase().startsWith("METHOD")) {
+        if ((linesplit[0] || '').toUpperCase().startsWith("METHOD")) {
             metDef.name = linesplit[1];
         }
         linesplit.forEach((word, index, arr) => {
@@ -262,11 +272,14 @@ export class COSMethodDefinition {
         }
         linesplit = methodBody.split(/\n/);
         linesplit.forEach((line, index, arr) => {
+            if (/^[a-z].*/i.test(line)) {
+                return;
+            }
             let lineUpper = line.toUpperCase().split(/\t/).join('').trim();
             let split = line.split(' ');
             if (lineUpper.startsWith("S") || lineUpper.startsWith("SET")) {
-                let varname: string = split[1];
-                if (varname.indexOf("(")>=0 || varname.indexOf(".")>=0) {
+                let varname: string = (split[1] || '').split('=')[0];
+                if (varname.indexOf("(")>=0 || varname.indexOf(".")>=0 || varname.startsWith('$')) {
                     return
                 }
                 if (!search("name", varname)) {
@@ -278,9 +291,12 @@ export class COSMethodDefinition {
                 }
             }
             if (lineUpper.startsWith("#DIM")) {
-                let varname: string = split[1];
+                let varname: string = (split[1] || '').split('=')[0];
+                if (varname.startsWith('$')) {
+                    return
+                }
                 let type: string = 'UNDEFINED';
-                if (split[2].toUpperCase() === "AS") {
+                if ((split[2] || '').toUpperCase() === "AS") {
                     type = split[3];
                 }
                 if (!search("name", varname)) {
@@ -314,7 +330,7 @@ export class COSPropertyDefinition {
     static parse(line: string): COSPropertyDefinition {
         let propDef: COSPropertyDefinition = new COSPropertyDefinition();
         let linesplit = line.split(' ');
-        if (linesplit[0].toUpperCase()==='PROPERTY') {
+        if ((linesplit[0] || '').toUpperCase()==='PROPERTY') {
             propDef.name = linesplit[1];
             propDef.type = linesplit[3];
         }

@@ -21,8 +21,9 @@ export class ObjectScriptCompletionItemProvider implements vscode.CompletionItem
       if (context.triggerKind === vscode.CompletionTriggerKind.TriggerCharacter) {
         if (context.triggerCharacter === '#')
           return this.entities(document, position, token, context, ob.ClassDefinition) || this.macro(document, position, token, context);
-        if (context.triggerCharacter === '.') 
+        if (context.triggerCharacter === '.') {
           return this.entities(document, position, token, context, ob.ClassDefinition);
+        }
       }
       let list = [];
       let dollars: any = this.dollarsComplete(document, position);
@@ -39,7 +40,8 @@ export class ObjectScriptCompletionItemProvider implements vscode.CompletionItem
       list = locals ? list.concat(locals) : list;
       return list;
     } catch (err) {
-      outputChannel.appendLine(err.message || err);
+      outputChannel.appendLine(`ERR: ${JSON.stringify(err)}`);
+      outputChannel.appendLine(`Line: ${document.lineAt(position.line).text}`);
     }
   }
 
@@ -62,7 +64,7 @@ export class ObjectScriptCompletionItemProvider implements vscode.CompletionItem
       if (line && line !== '') {
         return api.getMacroList(curFile.name, line)
         .then(data => data.result.content.macros.filter(search).map(mac))
-        .catch(err => outputChannel.appendLine(err.message || err));
+        .catch(err => outputChannel.appendLine(JSON.stringify(err)));
       }
       return null;
     }
@@ -343,7 +345,7 @@ export class ObjectScriptCompletionItemProvider implements vscode.CompletionItem
     // are we trying to dim something?
     let isDim = false;
     let isClassContainer = false;
-    let line = document.lineAt(position.line).text.toUpperCase();
+    let line = (document.lineAt(position.line).text || '').toUpperCase();
     let packname = line.replace('AS', '[AS]').split('[AS]')[1] || '';
     packname = packname.trim();
     if ((line.indexOf('#DIM')>=0) && (line.indexOf('=')===-1)) {
@@ -357,7 +359,7 @@ export class ObjectScriptCompletionItemProvider implements vscode.CompletionItem
       const api = new AtelierAPI();
       return api.getDocNames({category: 'cls', generated: false, filter: packname})
         .then(data => data.result.content.map(cls))
-        .catch(ex => outputChannel.appendLine(ex.error || ex));
+        .catch(ex => outputChannel.appendLine(JSON.stringify(ex)));
     }
 
     let classRef = textBefore.match(/##class\(([^)]+)\)\.#?$/i);
@@ -369,7 +371,7 @@ export class ObjectScriptCompletionItemProvider implements vscode.CompletionItem
       }
       return classDef.methods('class').then(data => data.filter(search).map(method));
     }
-    if (curFile.fileName.endsWith('cls')) {
+    if (curFile.fileName.toUpperCase().endsWith('CLS')) {
       let selfRef = textBefore.match(/(?<!\.)\.\.#?$/i);
       if (selfRef) {
         let classDef = new ClassDefinition(curFile.name);

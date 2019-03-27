@@ -7,7 +7,7 @@ import structuredSystemVariables = require('./completion/structuredSystemVariabl
 import { ClassDefinition } from '../utils/classDefinition.js';
 import { currentFile, CurrentFile, outputChannel } from '../utils/index.js';
 import { AtelierAPI } from '../api/index.js';
-import { ObjectScriptParser, COSClassDefinition, COSClassMethodDefinition, COSMethodDefinition } from './parser/cosParser.js';
+import { COSClassDefinition, COSClassMethodDefinition, COSMethodDefinition } from './parser/cosParser.js';
 
 export class ObjectScriptCompletionItemProvider implements vscode.CompletionItemProvider {
   provideCompletionItems(
@@ -17,21 +17,21 @@ export class ObjectScriptCompletionItemProvider implements vscode.CompletionItem
     context: vscode.CompletionContext
   ): vscode.ProviderResult<vscode.CompletionItem[] | vscode.CompletionList> {
     try {
-      let ob = new ObjectScriptParser(document);
+      let ob = COSClassDefinition.getCache(document.uri.fsPath, document);
       if (context.triggerKind === vscode.CompletionTriggerKind.TriggerCharacter) {
         if (context.triggerCharacter === '#')
-          return this.entities(document, position, token, context, ob.ClassDefinition) || this.macro(document, position, token, context);
+          return this.entities(document, position, token, context, ob) || this.macro(document, position, token, context);
         if (context.triggerCharacter === '.') {
-          return this.entities(document, position, token, context, ob.ClassDefinition);
+          return this.entities(document, position, token, context, ob);
         }
       }
       let list = [];
       let dollars: any = this.dollarsComplete(document, position);
       let commands: any = this.commands(document, position);
-      let entities = this.entities(document, position, token, context, ob.ClassDefinition);
+      let entities = this.entities(document, position, token, context, ob);
       let macros = this.macro(document, position, token, context);
       let constants = this.constants(document, position, token, context);
-      let locals = this.locals(document, position, ob.ClassDefinition);
+      let locals = this.locals(document, position, ob);
       list = commands ? list.concat(commands.items || commands) : list;
       list = dollars ? list.concat(dollars.items || dollars) : list;
       list = entities ? list.concat(entities) : list;
@@ -40,8 +40,7 @@ export class ObjectScriptCompletionItemProvider implements vscode.CompletionItem
       list = locals ? list.concat(locals) : list;
       return list;
     } catch (err) {
-      outputChannel.appendLine(`ERR: ${JSON.stringify(err)}`);
-      outputChannel.appendLine(`Line: ${document.lineAt(position.line).text}`);
+      
     }
   }
 
@@ -270,6 +269,7 @@ export class ObjectScriptCompletionItemProvider implements vscode.CompletionItem
           label: ele.name,
           detail: ele.type,
           kind: kind,
+          documentation: new vscode.MarkdownString('Initialisation:').appendCodeblock(ele.definedBy, "objectscript"),
           sortText: (ele.name.startsWith('%') ? 'C': 'B')
         });
       });
@@ -297,14 +297,36 @@ export class ObjectScriptCompletionItemProvider implements vscode.CompletionItem
       markdown += ')$0';
       return markdown;
     }
-    const method = el => ({
-      label: el.name,
-      documentation: el.desc.length ? new vscode.MarkdownString(el.desc.join('')) : null,
-      kind: vscode.CompletionItemKind.Method,
-      //insertText: new vscode.SnippetString(`${el.name}($0)`)
-      insertText: new vscode.SnippetString(parseArgs(el)),
-      sortText: (el.name.startsWith('%') ? 'C' : 'B')
-    });
+    const method = (el, ind, arr) => {
+      if (el.name==="%New") {
+        let onNew = arr.find((val) => {
+          if (val.name==="%OnNew") {
+            return val;
+          }
+        });
+        if (onNew) {
+          onNew.name="%New"
+        } else {
+          onNew = el;
+        }
+        return {
+          label: el.name,
+          documentation: el.desc.length ? new vscode.MarkdownString(el.desc.join('')) : null,
+          kind: vscode.CompletionItemKind.Method,
+          //insertText: new vscode.SnippetString(`${el.name}($0)`)
+          insertText: new vscode.SnippetString(parseArgs(onNew)),
+          sortText: (el.name.startsWith('%') ? 'C' : 'B')
+        }
+      }
+      return {
+        label: el.name,
+        documentation: el.desc.length ? new vscode.MarkdownString(el.desc.join('')) : null,
+        kind: vscode.CompletionItemKind.Method,
+        //insertText: new vscode.SnippetString(`${el.name}($0)`)
+        insertText: new vscode.SnippetString(parseArgs(el)),
+        sortText: (el.name.startsWith('%') ? 'C' : 'B')
+      }
+    };
 
     const parameter = el => ({
       label: `${el.name}`,
@@ -340,9 +362,13 @@ export class ObjectScriptCompletionItemProvider implements vscode.CompletionItem
       }
     }
 
-    const search = el => el.name.startsWith(originalSearchText);
+    const search = el => {
+      if (el.name==="%OnNew" && originalSearchText==="%New") {
+        return true;
+      }
+      return el.name.startsWith(originalSearchText);
+    }
 
-    // are we trying to dim something?
     let isDim = false;
     let isClassContainer = false;
     let line = (document.lineAt(position.line).text || '').toUpperCase();
@@ -386,13 +412,20 @@ export class ObjectScriptCompletionItemProvider implements vscode.CompletionItem
         let context: COSClassMethodDefinition | COSMethodDefinition
         let struct: string[] = [searchText];
         if (!searchText) {
-          searchText = textBefore.replace('(', '').split(' ')[1].split('.')[0];
-          struct = textBefore.replace('(', '').split(' ')[1].split('.');
+          //searchText = textBefore.trim().replace('(', '').split(' ')[1].split('.')[0];
+          searchText = textBefore.trim().replace('(', '').split(' ').pop().split('.')[0];
+          //struct = textBefore.trim().replace('(', '').split(' ')[1].split('.');
+          struct = textBefore.trim().replace('(', '').split(' ').pop().split('.');
           struct.pop();
         }
         context = cosClass.getContext(document, position);
         let classDef = null;
         context.locals.forEach((el) => {
+          if (el.name === searchText) {
+            classDef = new ClassDefinition(el.type);
+          }
+        });
+        context.parameter.forEach((el) => {
           if (el.name === searchText) {
             classDef = new ClassDefinition(el.type);
           }
@@ -427,7 +460,6 @@ export class ObjectScriptCompletionItemProvider implements vscode.CompletionItem
         }
       }
     }
-
     return null;
   }
 }

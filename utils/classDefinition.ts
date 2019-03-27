@@ -48,7 +48,7 @@ export class ClassDefinition {
     const api = new AtelierAPI();
     const getMethods = content => {
       let extend = [];
-      content.forEach(el => {
+      (content || []).forEach(el => {
         methods.push(...el.content.methods);
         extend.push(...el.content.super.map(extendName => ClassDefinition.normalizeClassName(extendName, true)));
       });
@@ -74,7 +74,7 @@ export class ClassDefinition {
     const api = new AtelierAPI();
     const getProperties = content => {
       let extend = [];
-      content.forEach(el => {
+      (content || []).forEach(el => {
         properties.push(...el.content.properties);
         extend.push(...el.content.super.map(extendName => ClassDefinition.normalizeClassName(extendName, true)));
       });
@@ -94,7 +94,7 @@ export class ClassDefinition {
     const api = new AtelierAPI();
     const getParameters = content => {
       let extend = [];
-      content.forEach(el => {
+      (content || []).forEach(el => {
         parameters.push(...el.content.parameters);
         extend.push(...el.content.super.map(extendName => ClassDefinition.normalizeClassName(extendName, true)));
       });

@@ -27,10 +27,49 @@ export class COSClassDefinition {
     // Containing Parameters
     parameters: COSParameterDefinition[] = [];
 
+    lines: number;
+
+    public static _cache: any[] = [];
+
+    static setCache(name: string, classdef: COSClassDefinition) {
+        COSClassDefinition._cache[name] = {
+            classdef: classdef,
+            lines: classdef.lines
+        };
+    }
+
+    static getCache(name: string, textDocument: vscode.TextDocument): COSClassDefinition {
+        let maxlines = textDocument.lineCount;
+        let classDef: {classdef: COSClassDefinition, lines: number} = null;
+        try {
+            classDef = COSClassDefinition._cache[name] || null;
+            if (classDef!==null && classDef.lines!==maxlines) {
+                classDef = {
+                    classdef: COSClassDefinition.parse(textDocument),
+                    lines: maxlines
+                }
+            } else if (classDef===null) {
+                classDef = {
+                    classdef: COSClassDefinition.parse(textDocument),
+                    lines: maxlines
+                }
+            }
+        } catch (e) {
+            return COSClassDefinition.parse(textDocument);
+        }
+        return classDef.classdef
+    }
+
+    static clearCache(name?: string) {
+        if (name) COSClassDefinition._cache[name] = null;
+        COSClassDefinition._cache = [];
+    }
+
     static parse(textDocument: vscode.TextDocument): COSClassDefinition {
         try {
             let classDef: COSClassDefinition = new COSClassDefinition();
             let maxLines = textDocument.lineCount;
+            classDef.lines = maxLines;
             for (let i = 0; i<maxLines; i++) {
                 let line: vscode.TextLine = textDocument.lineAt(i);
                 let lineSplit = line.text.split('=').join(' = ').split(' ');
@@ -49,6 +88,7 @@ export class COSClassDefinition {
                     }
                 }
             }
+            COSClassDefinition.setCache(textDocument.uri.fsPath, classDef);
             return classDef;
         } catch (ex) {
             throw ex
@@ -113,10 +153,12 @@ export class COSClassMethodDefinition {
                         // parametername
                         let par = {
                             name: (arr[index] || ''),
-                            type: (arr[index+1] === "AS" ? arr[index+2]: '%String'),
+                            type: (arr[index+1].toUpperCase() === "AS" ? arr[index+2]: '%String'),
                             default: (arr[index+3] === "=" ? ((arr[index+4] || '').startsWith("{") ? '[COMPUTED]' : arr[index+4]) : '""')
                         }
-                        metDef.parameter.push(par);
+                        if (par.name !== '') {
+                            metDef.parameter.push(par);
+                        }
                     }
                 }
             }
@@ -161,9 +203,9 @@ export class COSClassMethodDefinition {
                 return;
             }
             let lineUpper = line.toUpperCase().split(/\t/).join('').trim();
-            let split = line.split(' ');
+            let split = line.trim().split(' ');
             if (lineUpper.startsWith("S") || lineUpper.startsWith("SET")) {
-                let varname: string = (split[1] || '').split('=')[0];
+                let varname: string = (split[1] || '').split('=')[0].trim();
                 if (varname.indexOf("(")>=0 || varname.indexOf(".")>=0 || varname.startsWith('$')) {
                     return
                 }
@@ -172,11 +214,12 @@ export class COSClassMethodDefinition {
                         new COSLocalVariableDefinition();
                     varDef.name = varname;
                     varDef.type = 'UNDEFINED';
+                    varDef.definedBy += line.trim();
                     metDef.locals.push(varDef);
                 }
             }
             if (lineUpper.startsWith("#DIM")) {
-                let varname: string = (split[1] || '').split('=')[0];
+                let varname: string = (split[1] || '').split('=')[0].trim();
                 if (varname.startsWith('$')) {
                     return
                 }
@@ -189,6 +232,7 @@ export class COSClassMethodDefinition {
                         new COSLocalVariableDefinition();
                     varDef.name = varname;
                     varDef.type = type;
+                    varDef.definedBy += line.trim();
                     metDef.locals.push(varDef);
                 }
             }
@@ -227,11 +271,14 @@ export class COSMethodDefinition {
                     && (word !== '')
                     && (word !== metDef.name.toUpperCase())) {
                         // parametername
-                        metDef.parameter.push({
-                            name: arr[index],
-                            type: (arr[index+1] === "AS" ? arr[index+2]: '%String'),
+                        let para = {
+                            name: arr[index] || '',
+                            type: (arr[index+1].toUpperCase() === "AS" ? arr[index+2]: '%String'),
                             default: (arr[index+3] === "=" ? (arr[index+4].startsWith("{") ? '[COMPUTED]' : arr[index+4]) : '')
-                        });
+                        }
+                        if (para.name !== '') {
+                            metDef.parameter.push(para);
+                        }
                     }
                 }
             }
@@ -287,6 +334,7 @@ export class COSMethodDefinition {
                         new COSLocalVariableDefinition();
                     varDef.name = varname;
                     varDef.type = 'UNDEFINED';
+                    varDef.definedBy += line.trim();
                     metDef.locals.push(varDef);
                 }
             }
@@ -304,6 +352,7 @@ export class COSMethodDefinition {
                         new COSLocalVariableDefinition();
                     varDef.name = varname;
                     varDef.type = type;
+                    varDef.definedBy += line.trim();
                     metDef.locals.push(varDef);
                 }
             }
@@ -348,6 +397,7 @@ export class COSParameterDefinition {
 export class COSLocalVariableDefinition {
     name: string;
     type: string;
+    definedBy: string = ' ';
 }
 
 export class COSMethodParameterDefinition {
